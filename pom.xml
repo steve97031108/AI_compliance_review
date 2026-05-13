@@ -64,6 +64,13 @@
             <version>0.18.2</version>
         </dependency>
 
+        <!-- Retrofit Jackson Converter (OpenAI 客户端传递依赖, 版本与 openai-gpt3-java 0.18.2 一致) -->
+        <dependency>
+            <groupId>com.squareup.retrofit2</groupId>
+            <artifactId>converter-jackson</artifactId>
+            <version>2.9.0</version>
+        </dependency>
+
         <!-- Jackson -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
