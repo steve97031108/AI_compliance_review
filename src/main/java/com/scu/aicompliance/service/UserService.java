@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.scu.aicompliance.model.User;
 import com.scu.aicompliance.util.JsonUtil;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,7 @@ import java.util.Optional;
 
 /**
  * 用户服务类，负责用户数据的加载、查找和密码验证。
+ * 使用 @Lazy 注入 BCryptPasswordEncoder 打破与 SecurityConfig 的循环依赖。
  */
 @Service
 public class UserService {
@@ -23,7 +25,7 @@ public class UserService {
     private final BCryptPasswordEncoder passwordEncoder;
     private List<User> users = new ArrayList<>();
 
-    public UserService(BCryptPasswordEncoder passwordEncoder) {
+    public UserService(@Lazy BCryptPasswordEncoder passwordEncoder) {
         this.passwordEncoder = passwordEncoder;
     }
 

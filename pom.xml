@@ -45,10 +45,16 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- Vaadin -->
+        <!-- Vaadin (排除 push 以禁用 WebSocket Push，仅保留 Atmosphere 运行时供框架使用) -->
         <dependency>
             <groupId>com.vaadin</groupId>
             <artifactId>vaadin-spring-boot-starter</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.vaadin</groupId>
+                    <artifactId>vaadin-push</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- OpenAI GPT-3 Java -->
@@ -81,6 +87,14 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
+        </dependency>
+
+        <!-- DevTools (开发热重载) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
         </dependency>
 
         <!-- Test Dependencies -->
