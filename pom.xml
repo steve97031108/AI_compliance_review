@@ -18,7 +18,7 @@
     <description>AI Compliance Review System</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
         <vaadin.version>24.3.10</vaadin.version>
     </properties>
 
@@ -45,16 +45,10 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- Vaadin (排除 push 以禁用 WebSocket Push，仅保留 Atmosphere 运行时供框架使用) -->
+        <!-- Vaadin (包含 push 以支持 WebSocket 服务器推送，使 ui.access() 变更实时反映) -->
         <dependency>
             <groupId>com.vaadin</groupId>
             <artifactId>vaadin-spring-boot-starter</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.vaadin</groupId>
-                    <artifactId>vaadin-push</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- OpenAI GPT-3 Java -->
@@ -64,7 +58,7 @@
             <version>0.18.2</version>
         </dependency>
 
-        <!-- Retrofit Jackson Converter (OpenAI 客户端传递依赖, 版本与 openai-gpt3-java 0.18.2 一致) -->
+        <!-- Retrofit2 Jackson Converter (OpenAI 客户端构建 Retrofit 实例需要) -->
         <dependency>
             <groupId>com.squareup.retrofit2</groupId>
             <artifactId>converter-jackson</artifactId>
@@ -90,11 +84,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- SLF4J Simple -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-        </dependency>
+        <!-- SLF4J — Spring Boot 已内置 Logback，排除 slf4j-simple 避免多重绑定冲突 -->
 
         <!-- DevTools (开发热重载) -->
         <dependency>

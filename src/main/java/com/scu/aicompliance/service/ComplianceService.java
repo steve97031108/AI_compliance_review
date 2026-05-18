@@ -1,35 +1,44 @@
 package com.scu.aicompliance.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.scu.aicompliance.model.ComplianceResult;
 import com.scu.aicompliance.model.SystemConfig;
-import com.theokanning.openai.completion.chat.ChatCompletionRequest;
-import com.theokanning.openai.completion.chat.ChatMessage;
-import com.theokanning.openai.service.OpenAiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.List;
 
 /**
- * 合规审查服务 — 调用 OpenAI 兼容 API 进行内容合规分析。
+ * 合规审查服务 — 使用 Java 原生 HttpClient 直接调用 DeepSeek API 进行内容合规分析。
  */
 @Service
 public class ComplianceService {
 
     private static final Logger log = LoggerFactory.getLogger(ComplianceService.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
 
     private static final String SYSTEM_PROMPT = """
             你是一个专业的内容合规审查助手。请审查用户提交的内容，判断是否违规。
             审查维度包括：色情低俗、暴力恐怖、违法犯罪、政治敏感、虚假信息、广告营销、侵犯隐私等。
-            
+
             请以JSON格式返回审查结果，格式如下：
             {"violation": true或false, "reason": "违规原因简述", "riskLevel": "低风险/中风险/高风险"}
-            
+
             只返回JSON，不要包含其他文字。""";
 
     private final ConfigService configService;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
 
     public ComplianceService(ConfigService configService) {
         this.configService = configService;
@@ -49,63 +58,96 @@ public class ComplianceService {
         }
 
         try {
-            OpenAiService service = new OpenAiService(
-                    cfg.getOpenaiApiKey(),
-                    Duration.ofSeconds(cfg.getTimeoutSeconds() != null ? cfg.getTimeoutSeconds() : 60)
-            );
+            // 构建请求体
+            ObjectNode requestBody = MAPPER.createObjectNode();
+            requestBody.put("model",
+                    cfg.getModelName() != null ? cfg.getModelName() : "deepseek-chat");
+            requestBody.put("temperature",
+                    cfg.getTemperature() != null ? cfg.getTemperature() : 0.7);
+            requestBody.put("max_tokens",
+                    cfg.getMaxTokens() != null ? cfg.getMaxTokens() : 512);
+            requestBody.put("stream", false);
 
-            // 如果有自定义 baseUrl，需要反射设置（openai-gpt3-java 支持）
-            if (cfg.getOpenaiBaseUrl() != null && !cfg.getOpenaiBaseUrl().isBlank()) {
-                setBaseUrl(service, cfg.getOpenaiBaseUrl());
+            ArrayNode messagesArray = requestBody.putArray("messages");
+            messagesArray.addObject()
+                    .put("role", "system")
+                    .put("content", SYSTEM_PROMPT);
+            messagesArray.addObject()
+                    .put("role", "user")
+                    .put("content", content);
+
+            String jsonBody = MAPPER.writeValueAsString(requestBody);
+
+            // 构建 API URL
+            String baseUrl = cfg.getOpenaiBaseUrl();
+            if (baseUrl == null || baseUrl.isBlank()) {
+                baseUrl = "https://api.deepseek.com";
             }
+            String apiUrl = baseUrl.replaceAll("/+$", "") + CHAT_COMPLETIONS_PATH;
 
-            ChatCompletionRequest request = ChatCompletionRequest.builder()
-                    .model(cfg.getModelName() != null ? cfg.getModelName() : "gpt-3.5-turbo")
-                    .messages(List.of(
-                            new ChatMessage("system", SYSTEM_PROMPT),
-                            new ChatMessage("user", content)
-                    ))
-                    .temperature(cfg.getTemperature() != null ? cfg.getTemperature() : 0.7)
-                    .maxTokens(cfg.getMaxTokens() != null ? cfg.getMaxTokens() : 512)
+            log.info("合规审查请求: url={}, model={}", apiUrl, cfg.getModelName());
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + cfg.getOpenaiApiKey())
+                    .timeout(Duration.ofSeconds(
+                            cfg.getTimeoutSeconds() != null ? cfg.getTimeoutSeconds() : 60))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
 
-            ChatMessage response = service.createChatCompletion(request)
-                    .getChoices().get(0).getMessage();
+            HttpResponse<String> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofString());
 
-            String responseText = response.getContent().trim();
-            // 清理可能的 markdown 代码块标记
-            if (responseText.startsWith("```")) {
-                responseText = responseText.replaceAll("```json\\s*", "").replaceAll("```\\s*$", "").trim();
+            String responseBody = response.body();
+
+            if (response.statusCode() != 200) {
+                log.error("合规审查 API 返回错误: status={}, body={}",
+                        response.statusCode(), responseBody);
+                return new ComplianceResult(false,
+                        "审查服务异常 (HTTP " + response.statusCode() + ")", "低风险");
             }
 
-            log.info("AI 审查结果: {}", responseText);
+            // 解析响应（支持 content 和 reasoning_content 两种模式）
+            ObjectNode responseJson = (ObjectNode) MAPPER.readTree(responseBody);
+            String responseText = responseJson
+                    .path("choices")
+                    .path(0)
+                    .path("message")
+                    .path("content")
+                    .asText(null);
+            if (responseText == null || responseText.isBlank()) {
+                responseText = responseJson
+                        .path("choices")
+                        .path(0)
+                        .path("message")
+                        .path("reasoning_content")
+                        .asText("")
+                        .trim();
+            }
+
+            // 清理可能的 markdown 代码块标记
+            if (responseText.startsWith("```")) {
+                responseText = responseText
+                        .replaceAll("```json\\s*", "")
+                        .replaceAll("```\\s*$", "")
+                        .trim();
+            }
+
+            log.info("合规审查结果: {}", responseText);
             return parseResult(responseText);
 
         } catch (Exception e) {
-            log.error("AI 审查请求失败", e);
+            log.error("合规审查请求失败", e);
             return new ComplianceResult(false, "审查服务异常: " + e.getMessage(), "低风险");
-        }
-    }
-
-    private void setBaseUrl(OpenAiService service, String baseUrl) {
-        try {
-            var apiField = OpenAiService.class.getDeclaredField("api");
-            apiField.setAccessible(true);
-            var api = apiField.get(service);
-            var baseUrlField = api.getClass().getDeclaredField("baseUrl");
-            baseUrlField.setAccessible(true);
-            baseUrlField.set(api, baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
-        } catch (Exception e) {
-            log.warn("无法设置自定义 baseUrl", e);
         }
     }
 
     private ComplianceResult parseResult(String json) {
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(json, ComplianceResult.class);
+            return MAPPER.readValue(json, ComplianceResult.class);
         } catch (Exception e) {
-            log.warn("解析AI返回结果失败，原始内容: {}", json);
+            log.warn("解析审查结果失败，原始内容: {}", json);
             return new ComplianceResult(false, "无法解析审查结果: " + json, "低风险");
         }
     }

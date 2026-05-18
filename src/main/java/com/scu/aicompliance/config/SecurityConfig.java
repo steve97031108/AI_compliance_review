@@ -5,7 +5,7 @@ import com.scu.aicompliance.ui.LoginView;
 import com.vaadin.flow.spring.security.VaadinWebSecurity;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -14,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(jsr250Enabled = true)
 public class SecurityConfig extends VaadinWebSecurity {
 
     private final UserService userService;
@@ -51,10 +52,11 @@ public class SecurityConfig extends VaadinWebSecurity {
      */
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        // Vaadin 默认安全配置（CSRF 令牌忽略、公共资源放行等）
-        super.configure(http);
-
-        // 将自定义登录视图设为表单登录页
+        // 先设登录视图，再调用父类配置（避免 anyRequest 后添加 matchers 报错）
         setLoginView(http, LoginView.class);
+
+        // Vaadin 默认安全配置（CSRF 令牌忽略、公共资源放行等），
+        // SettingsView 已通过 @RolesAllowed("ADMIN") 注解保护。
+        super.configure(http);
     }
 }
