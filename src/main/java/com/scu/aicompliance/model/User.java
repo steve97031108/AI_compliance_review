@@ -20,4 +20,14 @@ public class User {
 
     /** 角色（ADMIN/USER） */
     private String role;
+
+    /** 账户状态：ACTIVE（正常）/ PENDING（待管理员审批） */
+    private String status;
+
+    public User(String username, String passwordHash, String role) {
+        this.username = username;
+        this.passwordHash = passwordHash;
+        this.role = role;
+        this.status = "ACTIVE";
+    }
 }

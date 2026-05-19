@@ -79,8 +79,24 @@ public class MainLayout extends AppLayout {
 
         sideNav.addItem(chatItem, logsItem, statsItem);
 
-        // ADMIN 角色才显示 "系统设置"
+        // 所有已登录用户都能看到"个人信息"
+        SideNavItem profileItem = new SideNavItem("个人信息", "/profile",
+                VaadinIcon.USER.create());
+        styleNavItem(profileItem);
+        sideNav.addItem(profileItem);
+
+        // ADMIN 角色才显示
         if (isCurrentUserAdmin()) {
+            SideNavItem convItem = new SideNavItem("对话审查", "/admin/conversations",
+                    VaadinIcon.RECORDS.create());
+            styleNavItem(convItem);
+            sideNav.addItem(convItem);
+
+            SideNavItem userMgmtItem = new SideNavItem("用户管理", "/admin/users",
+                    VaadinIcon.USERS.create());
+            styleNavItem(userMgmtItem);
+            sideNav.addItem(userMgmtItem);
+
             SideNavItem settingsItem = new SideNavItem("系统设置", "/settings",
                     VaadinIcon.COG.create());
             styleNavItem(settingsItem);

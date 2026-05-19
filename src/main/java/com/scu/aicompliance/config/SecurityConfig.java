@@ -10,8 +10,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(jsr250Enabled = true)
@@ -24,26 +22,25 @@ public class SecurityConfig extends VaadinWebSecurity {
     }
 
     /**
-     * 密码编码器 — 返回 BCryptPasswordEncoder 具体类型，
-     * 确保 UserService 能通过构造器注入该 Bean。
-     */
-    @Bean
-    public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    /**
-     * UserDetailsService — 从 users.json 加载用户数据。
+     * UserDetailsService — 从 users.json 加载用户数据，拒绝 PENDING 状态用户登录。
      */
     @Bean
     public UserDetailsService userDetailsService() {
-        return username -> userService.findByUsername(username)
-                .map(user -> org.springframework.security.core.userdetails.User
-                        .withUsername(user.getUsername())
-                        .password(user.getPasswordHash())
-                        .roles(user.getRole())
-                        .build())
-                .orElseThrow(() -> new UsernameNotFoundException("用户不存在: " + username));
+        return username -> {
+            com.scu.aicompliance.model.User user = userService.findByUsername(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("用户不存在: " + username));
+
+            if ("PENDING".equals(user.getStatus())) {
+                throw new org.springframework.security.authentication.DisabledException(
+                        "账户尚未通过管理员审批，请等待审核");
+            }
+
+            return org.springframework.security.core.userdetails.User
+                    .withUsername(user.getUsername())
+                    .password(user.getPasswordHash())
+                    .roles(user.getRole())
+                    .build();
+        };
     }
 
     /**
